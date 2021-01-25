@@ -3,6 +3,11 @@ classdef PusherSlider
     %   An implementation of the model from `Feedback Control of the 
     %   Pusher-Slider System: A Story of Hybrid and Underactuated
     %   Contact Dynamics` by Francois Robert Hogan and Alberto Rodriguez.
+    %
+    %Notes:
+    %   There is a quasi-static assumption in this system. i.e. "The quasi-static assumption suggests
+    %   that at low velocities, frictional contact forces dominate and inertial forces do not have
+    %   a decisive role in determining the motion of the slider."
     
     properties
         % State of the System
@@ -116,6 +121,211 @@ classdef PusherSlider
 
             
         end
+
+        function [ gamma_t , gamma_b ] = get_motion_cone_vectors(ps)
+            %get_motion_cone_vectors
+            %Description:
+            %
+            %Questions:
+            %   1. What is the coefficient mu in this formula? (Which one is it corresponding to?)
+            %   2. How do you normally compute the integral in m_max?
+
+            %Constants
+            g = 10;
+            f_max = ps.st_cof * ps.s_mass*g;
+            m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
+            c = f_max / m_max;
+            mu = ps.ps_cof; %Which coefficient of friction is this supposed to be?
+
+
+            gamma_t = (mu*c.^2 - ps.p_x * ps.p_y + mu*ps.p_x^2)/( c.^2 + ps.p_y.^2-mu*ps.p_x*ps.p_y );
+
+            gamma_b = (-mu*c.^2 - ps.p_x * ps.p_y - mu*ps.p_x^2)/( c.^2 + ps.p_y.^2 + mu*ps.p_x*ps.p_y );
+
+        end
+
+        function [ mode_name ] = identify_mode( ps , u )
+            %identify_mode
+            %Description:
+            %   Determines the mode of the sliding object w.r.t. the slider (mode is either sticking, sliding up, or sliding down).
+            %   The mode is determined by the input u, a two-dimensional vector.
+            %       u = [ v_n ]
+            %           [ v_t ]
+
+            % Constants
+
+            % Variables
+
+            v_n = u(1);
+            v_t = u(2);
+
+            [gamma_t, gamma_b] = ps.get_motion_cone_vectors();
+
+            % Algorithm
+            if ( v_t <= gamma_t * v_n ) && ( v_t >= gamma_b * v_n )
+                mode_name = 'Sticking';
+            elseif v_t > gamma_t*v_n
+                mode_name = 'SlidingUp';
+            else
+                mode_name = 'SlidingDown';
+            end
+
+        end
+
+
+        function [ C_out ] = C(ps)
+            %C
+            %Description:
+            %   Creates the rotation matrix used in the pusher slider system's dynamics.
+            %   Note: This is NOT the C matrix from the common linear system's y = Cx + v.
+
+
+            % Constants
+            theta = ps.s_theta;
+
+            % Algorithm
+
+            C_out = [ cos(theta) , sin(theta) ; -sin(theta) , cos(theta) ];
+
+        end
+
+        function [ Q_out ] = Q(ps)
+            %Q
+            %Description:
+            %   Creates the Q matrix defined in the equations of motion.
+
+            % Constants
+            g = 10;
+            f_max = ps.st_cof * ps.s_mass*g;
+            m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
+            c = f_max / m_max;
+            p_x = ps.p_x;
+            p_y = ps.p_y;
+
+            % Algorithm
+
+            Q_out = (1/( c.^2 + p_x.^2 + p_y.^2 )) * ...
+                [ c.^2 + p_x.^2, p_x * p_y ; p_x * p_y, c.^2 + p_y.^2 ];
+
+        end
+
+        function set_state(ps,x)
+            %set_state
+            %Description:
+            %   Sets the state of the pusher slider according to the state x
+            %   where
+            %           [   s_x   ]
+            %       x = [   s_y   ]
+            %           [ s_theta ]
+            %           [   p_y   ]
+
+            % Algorithm
+
+            ps.s_x = x(1);
+            ps.s_y = x(2);
+            ps.s_theta = x(3);
+            ps.p_y = x(4);
+
+        end
+
+        function [ dxdt ] = f1( ps , x , u )
+            %f1
+            %Description:
+            %   Continuous dynamics of the sticking mode of contact between pusher and slider.
+
+            % Constants
+            ps.set_state(x);
+            C0 = ps.C();
+            Q0 = ps.Q();
+
+            g = 10;
+            f_max = ps.st_cof * ps.s_mass*g;
+            m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
+            c = f_max / m_max;
+
+            p_x = ps.p_x;
+            p_y = ps.p_y;
+
+            % Algorithm
+            b1 = [ -p_y/(c.^2 + p_x.^2+p_y.^2) , p_x ];
+
+            c1 = [ 0 , 0 ];
+
+            P1 = eye(2);
+
+            dxdt = [    C0' * Q0 * P1 ; ...
+                        b1 ; ...
+                        c1 ];
+
+        end
+
+        function [ dxdt ] = f2( ps , x , u )
+            %f2
+            %Description:
+            %   Continuous dynamics of the SlidingUp mode of contact between pusher and slider.
+
+            % Constants
+            ps.set_state(x);
+            C0 = ps.C();
+            Q0 = ps.Q();
+
+            g = 10;
+            f_max = ps.st_cof * ps.s_mass*g;
+            m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
+            c = f_max / m_max;
+
+            p_x = ps.p_x;
+            p_y = ps.p_y;
+
+            [gamma_t,gamma_b] = ps.get_motion_cone_vectors();
+
+            % Algorithm
+            b2 = [ (-p_y+gamma_t*p_x)/(c.^2 + p_x.^2+p_y.^2) , 0 ];
+
+            c2 = [ -gamma_t , 0 ];
+
+            P2 = [1, 0; gamma_t, 0];
+
+            dxdt = [    C0' * Q0 * P2 ; ...
+                        b2 ; ...
+                        c2 ];
+
+        end
+
+        function [ dxdt ] = f3( ps , x , u )
+            %f3
+            %Description:
+            %   Continuous dynamics of the SlidingDown mode of contact between pusher and slider.
+
+            % Constants
+            ps.set_state(x);
+            C0 = ps.C();
+            Q0 = ps.Q();
+
+            g = 10;
+            f_max = ps.st_cof * ps.s_mass*g;
+            m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
+            c = f_max / m_max;
+
+            p_x = ps.p_x;
+            p_y = ps.p_y;
+
+            [gamma_t,gamma_b] = ps.get_motion_cone_vectors();
+
+            % Algorithm
+            b3 = [ (-p_y+gamma_b*p_x)/(c.^2 + p_x.^2+p_y.^2) , 0 ];
+
+            c3 = [ -gamma_b , 0 ];
+
+            P3 = [1, 0; gamma_b, 0];
+
+            dxdt = [    C0' * Q0 * P3 ; ...
+                        b3 ; ...
+                        c3 ];
+
+        end
+
+
     end
 end
 
