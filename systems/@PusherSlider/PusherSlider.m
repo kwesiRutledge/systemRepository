@@ -325,6 +325,26 @@ classdef PusherSlider
 
         end
 
+        function [ dxdt ] = f( ps , x , u )
+            %f
+            %Description:
+            %   Defines a switched nonlinear dynamical system.
+
+            % Algorithm
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            switch currMode
+                case 'Sticking'
+                    dxdt = ps.f1(x,u);
+                case 'SlidingUp'
+                    dxdt = ps.f2(x,u);
+                case 'SlidingDown'
+                    dxdt = ps.f3(x,u);
+                otherwise
+                    error('There was a problem with identifying the current mode!')
+            end
 
     end
 end
