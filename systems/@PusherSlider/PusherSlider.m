@@ -1,4 +1,4 @@
-classdef PusherSlider
+classdef PusherSlider < handle
     %PusherSlider A representation of the Pusher-Slider System
     %   An implementation of the model from `Feedback Control of the 
     %   Pusher-Slider System: A Story of Hybrid and Underactuated
@@ -49,7 +49,7 @@ classdef PusherSlider
             
         end
         
-        function show(varargin)
+        function [plot_handles,circ1] = show(varargin)
             %show Shows the system in a figure window.
             %   Uses the provided physical parameters to show the slider
             %   and pusher.
@@ -90,19 +90,19 @@ classdef PusherSlider
             % Plot
             hold on;
             for corner_idx = 1:size(r_n_t_corners,2)-1
-                plot( ...
+                plot_handles(corner_idx) = plot( ...
                     r_n_t_corners(1,corner_idx+[0:1]) , ...
                     r_n_t_corners(2,corner_idx+[0:1]) , ...
                     'LineWidth', lw , ...
                     'Color', sliderColorChoice ...
-                )
+                );
             end
-            plot( ...
+            plot_handles(length(plot_handles)+1) = plot( ...
                     r_n_t_corners(1,[4,1]) , ...
                     r_n_t_corners(2,[4,1]) , ...
                     'LineWidth', lw , ...
                     'Color', sliderColorChoice ...
-                )
+                );
             hold off;
 
             % Create Pusher
@@ -228,6 +228,36 @@ classdef PusherSlider
 
         end
 
+        function x = get_state(ps)
+            %get_state
+            %Description:
+            %   Gets the state of the pusher slider according to the state x
+            %   where
+            %           [   s_x   ]
+            %       x = [   s_y   ]
+            %           [ s_theta ]
+            %           [   p_y   ]
+            %
+            %Usage:
+            %   ps.get_state()
+
+            % Algorithm
+
+            x = [ ps.s_x , ps.s_y , ps.s_theta, ps.p_y ]';
+
+        end
+
+        function x_out = x(ps)
+            %x
+            %Description:
+            %   
+            %Usage:
+            %   x = ps.x()
+
+            x_out = ps.get_state();
+        end
+
+
         function [ dxdt ] = f1( ps , x , u )
             %f1
             %Description:
@@ -241,7 +271,7 @@ classdef PusherSlider
             g = 10;
             f_max = ps.st_cof * ps.s_mass*g;
             m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
-            c = f_max / m_max;
+            c = m_max / f_max;
 
             p_x = ps.p_x;
             p_y = ps.p_y;
@@ -255,7 +285,7 @@ classdef PusherSlider
 
             dxdt = [    C0' * Q0 * P1 ; ...
                         b1 ; ...
-                        c1 ];
+                        c1 ] * u;
 
         end
 
@@ -272,7 +302,7 @@ classdef PusherSlider
             g = 10;
             f_max = ps.st_cof * ps.s_mass*g;
             m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
-            c = f_max / m_max;
+            c = m_max / f_max;
 
             p_x = ps.p_x;
             p_y = ps.p_y;
@@ -288,7 +318,7 @@ classdef PusherSlider
 
             dxdt = [    C0' * Q0 * P2 ; ...
                         b2 ; ...
-                        c2 ];
+                        c2 ] * u;
 
         end
 
@@ -305,7 +335,7 @@ classdef PusherSlider
             g = 10;
             f_max = ps.st_cof * ps.s_mass*g;
             m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
-            c = f_max / m_max;
+            c = m_max / f_max;
 
             p_x = ps.p_x;
             p_y = ps.p_y;
@@ -321,7 +351,7 @@ classdef PusherSlider
 
             dxdt = [    C0' * Q0 * P3 ; ...
                         b3 ; ...
-                        c3 ];
+                        c3 ] * u;
 
         end
 
@@ -345,6 +375,7 @@ classdef PusherSlider
                 otherwise
                     error('There was a problem with identifying the current mode!')
             end
+        end
 
     end
 end

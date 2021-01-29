@@ -19,11 +19,6 @@ classdef FixedHeightPlanarLIPM
         r_foot;     %Radius of the Foot
         XDimension; %Dimension of the x variable (the state)
         UDimension; %Dimension of the u variable (the input)
-        
-        %Definition of Linear System Parameters
-        %   \dot{x} = Ax + Bu
-        A;  
-        B;  
     end
     
     methods
@@ -55,10 +50,6 @@ classdef FixedHeightPlanarLIPM
             systemOut.XDimension = 2;
             systemOut.UDimension = 1;
             
-            systemOut.A = [ 0 ,                         1 ;
-                            (g/(systemOut.zbar_cm)) ,   0 ];
-            systemOut.B = [ 0 ; (g/(systemOut.zbar_cm))*systemOut.r_foot ];
-            
         end
         
 %         function dxdt = Dynamics(varargin)
@@ -77,7 +68,23 @@ classdef FixedHeightPlanarLIPM
 %             end
 %         end
         
-        function dxdt = ODEForm(t,x,u)
+        function A_out = A(lipm)
+            A_out = [   0 ,                         1 ;
+                        (g/(systemOut.zbar_cm)) ,   0 ];
+        end
+
+        function B_out = B(lipm)
+            %Description:
+            %
+            %Usage:
+            %   B = lipm.B()
+
+            B = [ 0 ; (g/(systemOut.zbar_cm))*systemOut.r_foot ];
+        end
+
+        function dxdt = ODEForm(lipm, t,x,u)
+            A = lipm.A();
+            B = lipm.B();
             dxdt = A*x + B*u;
         end
     end
