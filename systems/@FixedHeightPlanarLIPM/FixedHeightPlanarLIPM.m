@@ -69,9 +69,38 @@ classdef FixedHeightPlanarLIPM
 %         end
         
         function A_out = A(lipm)
+            %A
+            %Description:
+            %   Returns the "A" matrix, when the differential equation is written
+            %   as x-dot = A x + B u
+            %
+
+            % Constants
+            g = 10; %Rough approximation of gravitational constant
+
+            % Algorithm
+
             A_out = [   0 ,                         1 ;
-                        (g/(systemOut.zbar_cm)) ,   0 ];
+                        (g/(lipm.zbar_cm)) ,   0 ];
         end
+
+        function A_out = Ad(lipm,dt)
+            %Ad
+            %Description:
+            %   Returns the discretized version of the A matrix, so that the dynamical system
+            %   (i.e. the differential equations) can be rewritten as a time difference equation
+            %   x^+ = Ad x + Bd u
+            %   The discretization time length is dt.
+            %
+            %Usage:
+            %   Ad0 = lipm.Ad(dt)
+
+            tempA = lipm.A();
+
+            A_out = expm(tempA*dt);
+
+        end
+
 
         function B_out = B(lipm)
             %Description:
@@ -79,8 +108,38 @@ classdef FixedHeightPlanarLIPM
             %Usage:
             %   B = lipm.B()
 
-            B = [ 0 ; (g/(systemOut.zbar_cm))*systemOut.r_foot ];
+            % Constants
+            g = 10;
+
+            % Algorithm
+
+            B_out = [ 0 ; (g/(lipm.zbar_cm))*lipm.r_foot ];
         end
+
+        function B_out = Bd(lipm,dt)
+            %Bd
+            %Description:
+            %   Returns the discretized version of the B matrix, so that the dynamical system
+            %   (i.e. the differential equations) can be rewritten as a time difference equation
+            %   x^+ = Ad x + Bd u
+            %   The discretization time length is dt.
+            %
+            %Usage:
+            %   Bd0 = lipm.Bd(dt)
+
+            % Constants
+
+            % Algorithm
+
+            A = lipm.A();
+            B = lipm.B();
+
+            temp_integrand = @(t) expm(A*t)*B;
+
+            B_out = integral( temp_integrand , 0 , dt , 'ArrayValued',true);
+
+        end
+
 
         function dxdt = ODEForm(lipm, t,x,u)
             A = lipm.A();

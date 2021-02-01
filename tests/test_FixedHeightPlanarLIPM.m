@@ -47,4 +47,89 @@ function test2_constructor(testCase)
     
 	%% Algorithm
 
-	assert( all(all(lipm1.A == A2)) && all(lipm1.B == B2) )
+	assert( all(all(lipm1.A() == A2)) && all(lipm1.B() == B2) )
+
+function test1_Ad(testCase)
+	%Description:
+	%	Tests that the discretized Ad matrix computes the proper value for Ad
+	%	when compared to what c2d produces.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	lipm1 = FixedHeightPlanarLIPM();
+
+    A1 = [ 0 , 1 ; 10 , 0 ];
+    B1 = [ 0 ; 0.5]; 
+
+    dt = 0.1;
+
+    temp_sys = ss(A1,B1,eye(2),0);
+    temp_dsys = c2d(temp_sys,dt);
+
+    assert( all(all( temp_dsys.A == lipm1.Ad(dt) )) )
+
+function test2_Ad(testCase)
+	%Description:
+	%	Tests that the discretized Ad matrix computes the proper value for Ad
+	%	when compared to what matrix exponential finds.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	lipm1 = FixedHeightPlanarLIPM();
+
+    A1 = [ 0 , 1 ; 10 , 0 ];
+    B1 = [ 0 ; 0.5]; 
+
+    dt = 0.1;
+
+    assert( all(all( expm(A1*dt) == lipm1.Ad(dt) )) )
+
+function test1_Bd(testCase)
+	%Description:
+	%	Tests that the discretized Bd matrix computes the proper value for Ad
+	%	when compared to what c2d produces.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	lipm1 = FixedHeightPlanarLIPM();
+
+    A1 = [ 0 , 1 ; 10 , 0 ];
+    B1 = [ 0 ; 0.5]; 
+
+    dt = 0.1;
+
+    temp_sys = ss(A1,B1,eye(2),0);
+    temp_dsys = c2d(temp_sys,dt);
+
+    temp_diff = temp_dsys.B - lipm1.Bd(dt);
+
+
+    assert( all(all( temp_diff < 10^(-10) )) )
+
+function test2_Bd(testCase)
+	%Description:
+	%	Tests that the discretized Bd matrix computes the proper value for Ad
+	%	when compared to what vector integral produces.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	lipm1 = FixedHeightPlanarLIPM();
+
+    A1 = [ 0 , 1 ; 10 , 0 ];
+    B1 = [ 0 ; 0.5]; 
+
+    dt = 0.1;
+
+    Bd_expected = integral(@(t) expm(A1*t)*B1,0,dt, 'ArrayValued',true);
+
+    assert( all(all( Bd_expected == lipm1.Bd(dt) )) )
+
+
