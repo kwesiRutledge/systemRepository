@@ -3,6 +3,7 @@ classdef PusherSlider < handle
     %   An implementation of the model from `Feedback Control of the 
     %   Pusher-Slider System: A Story of Hybrid and Underactuated
     %   Contact Dynamics` by Francois Robert Hogan and Alberto Rodriguez.
+    %   https://arxiv.org/abs/1611.08268
     %
     %Notes:
     %   There is a quasi-static assumption in this system. i.e. "The quasi-static assumption suggests
@@ -16,6 +17,9 @@ classdef PusherSlider < handle
         s_theta;    %orientation of the CoM of the Slider w.r.t. Frame of reference a
         p_x;        %x position of the pusher w.r.t. Frame of reference b (attached to slider)
         p_y;        %y position of the pusher w.r.t. Frame of reference b (attached to slider)
+        % Input of the System
+        v_n;        %speed of the pusher in the direction normal to the edge of the sliding block
+        v_t;        %speed of the pusher in the direction tangent to the edge of the sliding block
         % Physical Parameters of System
         s_length;   %length of the slider
         s_width;    %width of the slider
@@ -45,6 +49,10 @@ classdef PusherSlider < handle
             ps.s_theta = pi/6;
             ps.p_x = ps.s_width/2;
             ps.p_y = 0.02;
+
+            % Define Initial Input
+            ps.v_n = 0.01;
+            ps.v_t = 0.03;
             
             
         end
@@ -126,6 +134,10 @@ classdef PusherSlider < handle
             %get_motion_cone_vectors
             %Description:
             %
+            %
+            %Usage:
+            %     [gamma_t, gamma_b] = ps.get_motion_cone_vectors();
+            %
             %Questions:
             %   1. What is the coefficient mu in this formula? (Which one is it corresponding to?)
             %   2. How do you normally compute the integral in m_max?
@@ -135,7 +147,7 @@ classdef PusherSlider < handle
             f_max = ps.st_cof * ps.s_mass*g;
             m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
             c = f_max / m_max;
-            mu = ps.ps_cof; %Which coefficient of friction is this supposed to be?
+            mu = ps.st_cof; %Which coefficient of friction is this supposed to be?
 
 
             gamma_t = (mu*c.^2 - ps.p_x * ps.p_y + mu*ps.p_x^2)/( c.^2 + ps.p_y.^2-mu*ps.p_x*ps.p_y );
@@ -228,6 +240,21 @@ classdef PusherSlider < handle
 
         end
 
+        function set_input(ps,u)
+            %set_input
+            %Description:
+            %   Gets the current input, where the input of the pusher slider x is
+            %
+            %       u = [ v_n ]
+            %           [ v_t ]
+            %Usage:
+            %   ps.get_input()
+
+            ps.v_n = u(1);
+            ps.v_t = u(2);
+
+        end
+
         function x = get_state(ps)
             %get_state
             %Description:
@@ -247,6 +274,20 @@ classdef PusherSlider < handle
 
         end
 
+        function u = get_input(ps)
+            %get_input
+            %Description:
+            %   Gets the current input, where the input of the pusher slider x is
+            %
+            %       u = [ v_n ]
+            %           [ v_t ]
+            %Usage:
+            %   ps.get_input()
+
+            u = [ ps.v_n ; ps.v_t ];
+
+        end
+
         function x_out = x(ps)
             %x
             %Description:
@@ -255,6 +296,15 @@ classdef PusherSlider < handle
             %   x = ps.x()
 
             x_out = ps.get_state();
+        end
+
+        function u_out = u(ps)
+            %u
+            %Description:
+            %   Returns the current input of the pusher slider system.
+
+            u_out = ps.get_input();
+
         end
 
 
@@ -361,7 +411,9 @@ classdef PusherSlider < handle
             %   Defines a switched nonlinear dynamical system.
 
             % Algorithm
-            ps.set_state(x);
+            %ps.set_state(x);
+
+            x_init = ps.x();
 
             currMode = ps.identify_mode(u);
 
@@ -375,6 +427,472 @@ classdef PusherSlider < handle
                 otherwise
                     error('There was a problem with identifying the current mode!')
             end
+
+            % Set state to be what it was originally given as.
+            ps.set_state(x_init);
+
+        end
+
+        function [ A , B ] = LinearizedSystemAbout(ps,x,u)
+            %LinearizedSystemAbout
+            %Description:
+            %
+            %Usage:
+            %   [ A , B ] = ps.LinearizedSystemAbout(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            switch currMode
+                case 'Sticking'
+                    dxdt = ps.f1(symvar_x,symvar_u);
+                case 'SlidingUp'
+                    dxdt = ps.f2(symvar_x,symvar_u);
+                case 'SlidingDown'
+                    dxdt = ps.f3(symvar_x,symvar_u);
+                otherwise
+                    error('There was a problem with identifying the current mode!')
+            end
+
+            dfdx = jacobian(dxdt,symvar_x);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            % Doesn't work.
+            % symvar_x = x;
+            % symvar_u = u;
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            A = eval( subs(dfdx) );
+            B = eval( subs(dfdu) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ A_out ] = A1(ps,x,u)
+            %A1
+            %Description:
+            %   Computes the linearized system matrix A assuming that the motion cone is the 'sticking one'
+            %Usage:
+            %   [ A ] = ps.A1(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            % (Mode is assumed to be 1 (sticking))
+            % Compute Jacobian
+            dxdt = ps.f1(symvar_x,symvar_u);
+
+            dfdx = jacobian(dxdt,symvar_x);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            A_out = eval( subs(dfdx) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ A_out ] = A2(ps,x,u)
+            %A2
+            %Description:
+            %   Computes the linearized system matrix A assuming that the motion cone is the 'sliding up' one
+            %Usage:
+            %   [ A ] = ps.A2(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            % (Mode is assumed to be 1 (sticking))
+            % Compute Jacobian
+            dxdt = ps.f2(symvar_x,symvar_u);
+
+            dfdx = jacobian(dxdt,symvar_x);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            A_out = eval( subs(dfdx) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ A_out ] = A3(ps,x,u)
+            %A3
+            %Description:
+            %   Computes the linearized system matrix A assuming that the motion cone is the 
+            %   'sliding down' one
+            %Usage:
+            %   [ A ] = ps.A3(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            % (Mode is assumed to be 1 (sticking))
+            % Compute Jacobian
+            dxdt = ps.f3(symvar_x,symvar_u);
+
+            dfdx = jacobian(dxdt,symvar_x);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            A_out = eval( subs(dfdx) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ B_out ] = B1(ps,x,u)
+            %B1
+            %Description:
+            %   Computes the linearized system matrix B assuming that the motion cone is the 'sticking one'
+            %Usage:
+            %   [ B ] = ps.B1(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            % (Mode is assumed to be 1 (sticking))
+            % Compute Jacobian
+            dxdt = ps.f1(symvar_x,symvar_u);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            B_out = eval( subs(dfdu) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ B_out ] = B2(ps,x,u)
+            %B2
+            %Description:
+            %   Computes the linearized system matrix B assuming that the motion cone is the 'sliding up' one
+            %Usage:
+            %   [ B ] = ps.B2(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            % (Mode is assumed to be 1 (sticking))
+            % Compute Jacobian
+            dxdt = ps.f2(symvar_x,symvar_u);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            B_out = eval( subs(dfdu) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ B_out ] = B3(ps,x,u)
+            %B3
+            %Description:
+            %   Computes the linearized system matrix B assuming that the motion cone is the 
+            %   'sliding down' one
+            %Usage:
+            %   [ B ] = ps.B3(x,u)
+            %
+
+            % Constants
+
+            x_init = ps.x();
+            u_init = ps.u();
+
+            % Algorithm
+
+            ps.set_state(x);
+
+            currMode = ps.identify_mode(u);
+
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            % Identify A
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            % (Mode is assumed to be 1 (sticking))
+            % Compute Jacobian
+            dxdt = ps.f3(symvar_x,symvar_u);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            B_out = eval( subs(dfdu) );
+
+            % Reset to initial state and input
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ C_t , C_b ] = LinearizedMotionConePerturbationVectorsAbout(ps, x, u)
+            %LinearizedMotionConeVectors
+            %Description:
+            %
+            %Usage:
+            %   [ C_t , C_b ] = ps.LinearizedMotionConePerturbationVectorsAbout(x,u)
+
+            % Constants
+            g = 10;
+            f_max = ps.st_cof * ps.s_mass*g;
+            m_max = ps.st_cof * ps.s_mass*g * (ps.s_width/2); % The last term is meant to come from a sort of mass distribution/moment calculation. ???
+            c = f_max / m_max;
+            mu = ps.st_cof; %Which coefficient of friction is this supposed to be?
+
+            % Algorithm
+
+            %Find Symbolic form of gradient
+            syms s_x s_y s_theta p_y v_n v_t real;
+
+            symvar_x = [s_x; s_y; s_theta; p_y];
+            symvar_u = [v_n; v_t];
+
+            gamma_t = (mu*c.^2 - ps.p_x * p_y + mu*ps.p_x^2)/( c.^2 + p_y.^2-mu*ps.p_x*p_y );
+            gamma_b = (-mu*c.^2 - ps.p_x * p_y - mu*ps.p_x^2)/( c.^2 + p_y.^2 + mu*ps.p_x*p_y );
+
+            dg_tdx = gradient(gamma_t, symvar_x);
+            dg_bdx = gradient(gamma_b, symvar_x);
+
+            s_x = x(1); s_y = x(2); s_theta = x(3); p_y = x(4);
+            v_n = u(1); v_t = u(2);
+
+            C_t = eval( subs(dg_tdx) );
+            C_b = eval( subs(dg_bdx) );
+
+        end
+
+        function [ E1 , D1 , g1 ] = Linearized_StickingInteractionMatrices_About( ps , x , u )
+            %Linearized_StickingInteractionMatrices_About
+            %Description:
+            %   Computes the matrices which define the linearized condition for sticking of the pusher slider
+            %   interaction.
+            %       E1(t) bar_x + D1(t) bar_u <= g1(t)
+            %   Note that the output of this function is E1, D1, d1 at a specific time when the state is x
+            %   and the input is u.
+            %
+            %Usage:
+            %   [ E1 , D1 , g1 ] = ps.Linearized_StickingInteractionMatrices_About( x , u )
+
+            % Constants
+            x_init = ps.get_state();
+            u_init = ps.get_input();
+
+            ps.set_state(x);
+            ps.set_input(u);
+            [ C_t , C_b ] = ps.LinearizedMotionConePerturbationVectorsAbout(x,u);
+            [gamma_t_star, gamma_b_star] = ps.get_motion_cone_vectors();
+
+            x_star = x;
+            u_star = u;
+
+            v_n_star = u_star(1); v_t_star = u_star(2);
+
+            % Algorithm
+
+            E1 = v_n_star * [ -C_t' ; C_b' ];
+            D1 = [ -gamma_t_star, 1 ; gamma_b_star, -1 ];
+            g1 = [ -v_t_star + gamma_t_star*v_n_star ; v_t_star - gamma_b_star * v_n_star ];
+
+            % Restore State to Initial Values
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ E2 , D2 , g2 ] = Linearized_SlidingUpInteractionMatrices_About( ps , x , u )
+            %Linearized_SlidingUpInteractionMatrices_About
+            %Description:
+            %   Computes the matrices which define the linearized condition for sliding down mode
+            %   of the pusher slider interaction.
+            %       E2(t) bar_x + D2(t) bar_u <= g2(t)
+            %   Note that the output of this function is E1, D1, d1 at a specific time when the state is x
+            %   and the input is u.
+            %
+            %Usage:
+            %   [ E2 , D2 , g2 ] = ps.Linearized_SlidingUpInteractionMatrices_About( x , u )
+
+            % Constants
+            x_init = ps.get_state();
+            u_init = ps.get_input();
+
+            ps.set_state(x);
+            ps.set_input(u);
+            [ C_t , C_b ] = ps.LinearizedMotionConePerturbationVectorsAbout(x,u);
+            [gamma_t_star, gamma_b_star] = ps.get_motion_cone_vectors();
+
+            x_star = x;
+            u_star = u;
+
+            v_n_star = u_star(1); v_t_star = u_star(2);
+
+            eps0 = 10^(-7);
+
+            % Algorithm
+
+            E2 = v_n_star * C_t';
+            D2 = [ gamma_t_star, -1 ];
+            g2 = [ v_t_star - gamma_t_star*v_n_star - eps0 ];
+
+            % Restore State to Initial Values
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
+        end
+
+        function [ E3 , D3 , g3 ] = Linearized_SlidingDownInteractionMatrices_About( ps , x , u )
+            %Linearized_SlidingDownInteractionMatrices_About
+            %Description:
+            %   Computes the matrices which define the linearized condition for sliding down mode
+            %   of the pusher slider interaction.
+            %       E3(t) bar_x + D3(t) bar_u <= g3(t)
+            %   Note that the output of this function is E1, D1, d1 at a specific time when the state is x
+            %   and the input is u.
+            %
+            %Usage:
+            %   [ E3 , D3 , g3 ] = ps.Linearized_SlidingDownInteractionMatrices_About( x , u )
+
+            % Constants
+            x_init = ps.get_state();
+            u_init = ps.get_input();
+
+            ps.set_state(x);
+            ps.set_input(u);
+            [ C_t , C_b ] = ps.LinearizedMotionConePerturbationVectorsAbout(x,u);
+            [gamma_t_star, gamma_b_star] = ps.get_motion_cone_vectors();
+
+            x_star = x;
+            u_star = u;
+
+            v_n_star = u_star(1); v_t_star = u_star(2);
+
+            eps0 = 10^(-7);
+
+            % Algorithm
+
+            E3 = - v_n_star * C_b';
+            D3 = [ -gamma_b_star, 1 ];
+            g3 = [ -v_t_star + gamma_b_star*v_n_star - eps0 ];
+
+            % Restore State to Initial Values
+            ps.set_state(x_init);
+            ps.set_input(u_init);
+
         end
 
     end

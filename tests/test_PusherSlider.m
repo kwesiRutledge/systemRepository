@@ -32,11 +32,11 @@ function test1_constructor(testCase)
 
 	assert( (ps1.p_x == 0.045) && (ps1.p_y==0.02) )
 
-function test1_show(testCase)
+function test2_constructor(testCase)
 	%Description:
-	%	Shows the default position of the PusherSlider system.
+	%	Tests constructor which now defines inputs.
 
-	%% Include Relevant Libraries
+    %% Include Relevant Libraries
     include_relevant_libraries();
     
 	%% Constants
@@ -44,10 +44,7 @@ function test1_show(testCase)
 
 	%% Algorithm
 
-	figure;
-	ps1.show();
-
-	assert(true)
+	assert( (ps1.v_n == 0.01) && (ps1.v_t==0.03) )
 
 function test1_get_motion_cone_vectors(testCase)
 	%Description:
@@ -56,7 +53,7 @@ function test1_get_motion_cone_vectors(testCase)
 
 	% Constants
 	ps = PusherSlider();
-	ps.ps_cof = 1;
+	ps.st_cof = 1;
 	ps.s_width = 1; % c = 2
 	ps.p_x = 3;
 	ps.p_y = 5;
@@ -76,7 +73,7 @@ function test1_identify_mode(testCase)
 
 	% Constants
 	ps = PusherSlider();
-	ps.ps_cof = 1;
+	ps.st_cof = 1;
 	ps.s_width = 0.4; % c = 5
 	ps.p_x = 2;
 	ps.p_y = 2;
@@ -162,9 +159,29 @@ function test1_Q(testCase)
 	assert(all(all( Q1 == Q_temp )))
 
 function test1_f(testCase)
-	%test1_f
 	%Description:
-	%	Tests that the f() function properly chooses the correct dynamics when given
+	%	Tests the f() function so that we know that the state of the pusher slider is not modified
+	%	after evaluating f at a given point.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	B = ps1.f( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+
+function test1_LinearizedSystemAbout(testCase)
+	%test1_LinearizedAbout
+	%Description:
+	%	Tests that the LinearizedAbout() function properly chooses the correct dynamics when given
 	%	an input.
 
 	%% Include Relevant Libraries
@@ -172,50 +189,230 @@ function test1_f(testCase)
     
 	%% Constants
 	ps1 = PusherSlider();
-	ps1.p_y = 0.01;
 
-	[t1,t2] = ps1.get_motion_cone_vectors()
-
+	x = ps1.get_state();
 	u = [0.1;0.2];
 
-	if ~exist('FileName')
-		FileName = 'pusherslider_test1_f.mp4';
+	[A,B] = ps1.LinearizedSystemAbout(x,u)
+
+	% eval(A)
+	eig(A)
+
+function test1_u(testCase)
+	%Description:
+	%	Tests ability to extract the current value of the input u
+
+    %% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	%% Algorithm
+
+	assert( all(ps1.u() == [0.01 ; 0.03]) )
+
+function test1_set_input(testCase)
+	%Description:
+	%	Verifies that set input can correctly change the default.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+	u_prime = [1;3];
+
+	%% Algorithm
+	ps1.set_input(u_prime)
+
+	assert( all(ps1.u() == u_prime) )
+
+function test1_A1(testCase)
+	%Description:
+	%	Verifies that A1() function does not change the value of the state.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	A = ps1.A1( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+function test1_A2(testCase)
+	%Description:
+	%	Verifies that A2() function does not change the value of the state.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	A = ps1.A2( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+function test1_A3(testCase)
+	%Description:
+	%	Verifies that A3() function does not change the value of the state.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	A = ps1.A3( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+function test1_B1(testCase)
+	%Description:
+	%	Verifies that B1() function does not change the value of the state.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	B1 = ps1.B1( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+function test1_B2(testCase)
+	%Description:
+	%	Verifies that B2() function does not change the value of the state.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	B = ps1.B2( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+function test1_B3(testCase)
+	%Description:
+	%	Verifies that B3() function does not change the value of the state.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+
+	x0 = ps1.get_state();
+	u_prime = [1;3];
+	x1 = x0 + [0.1;zeros(3,1)];
+
+	B = ps1.B3( x1 , u_prime );
+
+	assert(all(ps1.get_state() == x0))
+
+
+function test1_LinearizedMPC(testCase)
+	%Description:
+	%	Verifies that LinearizedMPC can accurately find when the input x0 is not of the proper dimension.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+	u_prime = [1;3];
+
+	%% Algorithm
+	try
+		ps1.LinearizedMPC(u_prime,1,2,3)
+		assert(false)
+	catch e
+		disp(e.message)
+		assert(strcmp(e.message,['Expected the input x0 to be four dimensional. Instead it has dimension 2.' ]))
 	end
-	vidObj = VideoWriter(FileName,'MPEG-4');
 
-	%% Simulating System Using ODE45
-	t_span = [0,2]
-	t_span2 = [0:0.01:2]
-	[ t_trajectory , x_trajectory ] = ode45(@(t,x) ps1.f(x,u) , t_span2 , ps1.x() )
+function test2_LinearizedMPC(testCase)
+	%Description:
+	%	Verifies that LinearizedMPC can accurately find when not enough inputs are given.
 
-	%% Creating Video
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+	u_prime = [1;3];
 
-	axis_limits = [	0, ...
-					max(x_trajectory(:,1))+max(ps1.s_width,ps1.s_length), ...
-					0, ...
-					max(x_trajectory(:,2))+max(ps1.s_width,ps1.s_length) ]; 
-
-	open(vidObj);
-
-	figure;
-	for t = 1:length(t_trajectory)
-		%Collect State from the input list.
-		ps1.set_state(x_trajectory(t,:)');
-
-		%Plot
-		[h,c] = ps1.show();
-		axis(axis_limits)
-		
-		%Get Current frame and write it.
-		currFrame = getframe;
-		writeVideo(vidObj,currFrame);
-		delete(h);
-		delete(c);
-
-		%Prepare for plot to be overwritten
-		hold off; 
-
+	%% Algorithm
+	try
+		ps1.LinearizedMPC(u_prime,1,2)
+		assert(false)
+	catch e
+		disp(e.message)
+		assert(strcmp(e.message,['Expected at least 5 arguments. Received 4.' ]))
 	end
 
-	close(vidObj);
+function test3_LinearizedMPC(testCase)
+	%Description:
+	%	Verifies that LinearizedMPC can accurately find when the input an improper flag is given.
 
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+	u_prime = [1;3];
+
+	%% Algorithm
+	try
+		ps1.LinearizedMPC(u_prime,1,2,3,'Z',2)
+		assert(false)
+	catch e
+		disp(e.message)
+		assert(strcmp(e.message,['Unexpected extra input to LinearizedMPC: Z' ]))
+	end
+
+function test4_LinearizedMPC(testCase)
+	%Description:
+	%	Verifies that LinearizedMPC can accurately find when the input x0 is not of the proper dimension.
+
+	%% Include Relevant Libraries
+    include_relevant_libraries();
+    
+	%% Constants
+	ps1 = PusherSlider();
+	u_prime = [1;3];
+
+	%% Algorithm
+	try
+		ps1.LinearizedMPC(u_prime,1,2,3,'Z',2)
+		assert(false)
+	catch e
+		disp(e.message)
+		assert(strcmp(e.message,['Unexpected extra input to LinearizedMPC: Z' ]))
+	end
