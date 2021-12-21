@@ -16,7 +16,7 @@ end
 %%%%%%%%%%%%%%%
 
 itp = InvertedThickPendulum();
-%itp.CoMx_rel = 0;
+itp.CoMx_rel = 0;
 
 if ~exist('FileName')
 	FileName = 'invertedthickpendulum_test1_f.mp4';
