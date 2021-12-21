@@ -8,9 +8,12 @@ classdef InvertedThickPendulum
 		Height;
 		Length;
 		Mass;
+		mu_rot; %Rotational Coefficient of Friction
+
+		%State
 		x; 	% Two dimensional vector. First element is the angle 
 			% between the vertical and the ray pointing 
-			% towards the upper left hand side of the pendulum.
+			% towards the upper left hand side of the pendulum. (according to drawing below)
 	end
 
 	methods
@@ -61,13 +64,13 @@ classdef InvertedThickPendulum
 			systemOut.CoMx_rel = (systemOut.Length/2) - systemOut.Length; %Relative to the pendulum's frame.
 			systemOut.CoMy_rel = (systemOut.Height/2);  
 
+			systemOut.mu_rot = 0; %Set coefficient of friction to be zero by default.
+
 			if ~isfield(systemOut,'x')
 				systemOut.x = [0.1;0.05];
 			end
 
 		end
-
-
 
 		function [plot_handles] = Show( itp )
 			%Description:
@@ -79,7 +82,7 @@ classdef InvertedThickPendulum
 			lr_corner_pos = [0;0];
 
 			alpha_ang = atan(itp.Height/itp.Length);
-			theta = itp.x(1);
+			theta = wrapToPi(itp.x(1));
 
 			lw = 2.0; %LineWidth for Rectangle/Pendulum
             pendulumColorChoice = 'blue';
@@ -95,7 +98,7 @@ classdef InvertedThickPendulum
 						lr_corner_pos(1) - itp.Length , lr_corner_pos(2) + itp.Height ;
                         lr_corner_pos(1) - itp.Length , lr_corner_pos(2) ]';
 
-            if (0 <= theta) && (theta <= pi/2)
+            if (0 <= theta) && (theta <= pi)
             	angle_wrt_horizontal = -((pi/2) - theta - alpha_ang) ;
             elseif (-pi <= theta)  && (theta <= 0)
             	angle_wrt_horizontal = -(pi/2 + (-theta ) - alpha_ang );
@@ -175,16 +178,68 @@ classdef InvertedThickPendulum
 			m = itp.Mass;
 			g = 9.8;
 
-			r_CoM = norm( [itp.CoMx_rel ; itp.CoMy_rel] ,2) * (1/2);
+			r_CoM = norm( [itp.CoMx_rel ; itp.CoMy_rel] ,2);
 
 			%% Algorithm
 
-			dxdt = NaN(2,1);
-
 			dxdt(1) = x(2);
-			dxdt(2) = r_CoM * m * g * sin( x(1) + itp.get_CoM_angle_offset() ) + u;
+			dxdt(2) = r_CoM * m * g * cos( (pi/2) - (x(1) + itp.get_CoM_angle_offset()) ) - itp.mu_rot * x(2) + u;
+
+			dxdt = dxdt'; %Make this a column vector.
 
 		end
+
+		function [Ac,Bc] = LinearizedContinuousDynamicsAbout( itp , x , u )
+			%Description:
+			%	Creates the linearized, continuous time system when the linearization is centered at the state x and input u
+			%	and evaluated at the current state.
+			%
+			%Usage:
+			%	[ Ac , Bc ] = itp.LinearizedContinuousDynamicsAbout( x , u )
+
+			% Constants
+			syms theta_x theta_dot_x symvar_u real;
+
+            symvar_x = [theta_x; theta_dot_x];
+
+            % Dynamics
+            dxdt = itp.f(symvar_x,symvar_u);
+
+            dfdx = jacobian(dxdt,symvar_x);
+            dfdu = jacobian(dxdt,symvar_u);
+
+            %Give the symbolic variables real values based
+            %on the input x and u
+            theta_x = x(1); theta_dot_x = x(2);
+            symvar_u = u(1); 
+
+            Ac = eval( subs(dfdx) );
+            Bc = eval( subs(dfdu) );
+
+        end
+
+        function [ Ad , Bd ] = LinearizedDiscreteDynamicsAbout( itp , x , u , dt )
+			%Description:
+			%	Creates the linearized, discrete-time system when the linearization is centered at the state x and input u
+			%	and uses discretization state.
+
+			% Constants
+
+            % Get Continuous Time Matrices
+            [ Ac , Bc ] = itp.LinearizedContinuousDynamicsAbout( x , u );
+
+            n = size(Ac,1);
+
+            % Discretize using MATLAB's built-in tools
+            csys1 = ss(Ac,Bc,eye(n),0);
+
+            dsys1 = c2d(csys1,dt);
+
+            Ad = dsys1.A;
+            Bd = dsys1.B;
+
+        end
+
 	end
 
 end

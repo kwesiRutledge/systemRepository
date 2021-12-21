@@ -1,5 +1,6 @@
 # Ignore all files that are temp files on mac
 *.DS_Store
 
-#ignore videos
+#ignore videos and images
 *.mp4
+*.eps
